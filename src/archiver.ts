@@ -2,19 +2,15 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-const {
+import {
+  SFileAddFileEx,
   SFileCloseArchive,
   SFileCreateArchive,
-  SFileCreateFile,
-  SFileFinishFile,
-  SFileFlushArchive,
-  SFileWriteFile,
-  SFileCompactArchive,
-  SFileHasFile,
-  SFileRemoveFile
-} = require('stormlib-node');
+  SFileCompactArchive
+} from 'stormlib-node';
 import {
   HASH_TABLE_SIZE,
+  MPQ_COMPRESSION,
   MPQ_CREATE,
   MPQ_FILE
 } from 'stormlib-node/dist/enums';
@@ -29,13 +25,15 @@ type ArchiveBuildOptions = {
 export const build = async (input: ArchiveBuildOptions) => {
   const startTime = new Date();
 
+  const matches = await Patchignore(input.directoryPath);
+
   Logger.log(`Building archive "${path.basename(input.archivePath)}"...`);
 
   const getAllFiles = async (filePath: string): Promise<string[]> => {
     const relativePath = filePath
       .slice(input.directoryPath.length + 1)
       .replaceAll('\\\\', '/');
-    if (await Patchignore.matches(relativePath)) return [];
+    if (await matches(relativePath)) return [];
 
     if (!(await fs.lstat(filePath)).isDirectory()) return [filePath];
     return (
@@ -48,61 +46,38 @@ export const build = async (input: ArchiveBuildOptions) => {
   };
 
   const exists = await existsSync(input.archivePath);
-
-  const files = Object.fromEntries(
-    (await getAllFiles(input.directoryPath)).map(v => [v, 'add'] as const)
-  );
-
   if (exists) await fs.unlink(input.archivePath);
+
+  const files = await getAllFiles(input.directoryPath);
 
   const hMpq = SFileCreateArchive(
     input.archivePath,
-    MPQ_CREATE.ARCHIVE_V1,
-    Math.max(
-      Math.min(Object.keys(files).length, HASH_TABLE_SIZE.MAX),
-      HASH_TABLE_SIZE.MIN
-    )
+    MPQ_CREATE.ARCHIVE_V2,
+    Math.max(Math.min(files.length, HASH_TABLE_SIZE.MAX), HASH_TABLE_SIZE.MIN)
   );
 
   try {
-    for (const [file, event] of Object.entries(files)) {
+    for (const file of files) {
+      const fullPath = file.replaceAll('\\\\', '/');
       const relativePath = file
         .slice(input.directoryPath.length + 1)
         .replaceAll('\\\\', '/');
 
-      if (await Patchignore.matches(relativePath)) {
-        // Logger.log(`Ignored "${relativePath}"`);
+      if (await matches(relativePath)) {
+        Logger.log(`Ignored "${relativePath}"`);
         continue;
       }
 
-      // Logger.log(
-      //   `${
-      //     event === 'add'
-      //       ? 'Adding'
-      //       : event === 'change'
-      //       ? 'Updating'
-      //       : 'Removing'
-      //   } "${relativePath}"`
-      // );
-
-      if (SFileHasFile(hMpq, relativePath)) SFileRemoveFile(hMpq, relativePath);
-
-      if (event === 'add' || event === 'change') {
-        const buffer = (await fs.readFile(file)).buffer as ArrayBuffer;
-        const hFile = SFileCreateFile(
-          hMpq,
-          relativePath,
-          0,
-          buffer.byteLength,
-          0,
-          MPQ_FILE.COMPRESS
-        );
-        SFileWriteFile(hFile, buffer, 0);
-        SFileFinishFile(hFile);
-      }
+      SFileAddFileEx(
+        hMpq,
+        fullPath,
+        relativePath,
+        MPQ_FILE.COMPRESS,
+        MPQ_COMPRESSION.ZLIB,
+        MPQ_COMPRESSION.NEXT_SAME
+      );
     }
 
-    SFileFlushArchive(hMpq);
     Logger.log('Compressing the archive...');
     SFileCompactArchive(hMpq);
 

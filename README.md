@@ -13,7 +13,7 @@ haax-mpq <directoryPath> <archivePath?>
 
 ## Windows executable
 
-You can also use this CLI as a standalone windows executable. Run these scripts after cloning to generate it:
+You can also use this CLI as a standalone Windows executable. Run these scripts after cloning to generate it:
 
 ```
 pnpm i

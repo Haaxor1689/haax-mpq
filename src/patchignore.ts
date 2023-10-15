@@ -1,6 +1,10 @@
+import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import anymatch from 'anymatch';
 
-const patchignore = `
+const defaultPatchignore = `
 # ignore git related stuff
 .git/**
 .github/**
@@ -19,13 +23,19 @@ const patchignore = `
 **/*.md
 **/*.sql
 
-.patchignore`
-  .split('\n')
-  .map(v => v.trim())
-  .filter(v => !!v && !v.startsWith('#'));
+.patchignore`;
 
-const Patchignore = {
-  matches: (relativePath: string) => anymatch(patchignore, relativePath)
+const Patchignore = async (directoryPath: string) => {
+  const patchignorePath = path.join(directoryPath, '.patchignore');
+  const patchignore = (
+    existsSync(patchignorePath)
+      ? await fs.readFile(patchignorePath, { encoding: 'utf-8' })
+      : defaultPatchignore
+  )
+    .split('\n')
+    .map(v => v.trim())
+    .filter(v => !!v && !v.startsWith('#'));
+  return (relativePath: string) => anymatch(patchignore, relativePath);
 };
 
 export default Patchignore;
