@@ -12,6 +12,7 @@ const defaultPatchignore = `
 
 # ignore all file formats that have nothing to do in patch
 **/*.json
+**/*.yml
 **/*.yaml
 **/*.exe
 **/*.dll
