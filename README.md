@@ -13,11 +13,4 @@ haax-mpq <directoryPath> <archivePath?>
 
 ## Executable
 
-You can also use this CLI as a standalone executable. Run these scripts after cloning to generate it:
-
-```
-pnpm i
-pnpm run bundle
-```
-
-This will create a `haax-mpq` executable in the root of this repository. You can then drag & drop any folder you want to archive onto the executable.
+You can also use this CLI as a standalone executable that can be found in Releases. Download `haax-mpq.exe` for Windows or `haax-mpq` for Linux. You can then drag & drop any folder you want to archive onto the executable.
