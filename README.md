@@ -37,6 +37,12 @@ If no `.patchignore` file is found, these defaults will be used:
 **/*.md
 **/*.sql
 
+# ignore special mpq files
+(listfile)
+(attributes)
+(signature)
+(user data)
+
 .patchignore
 ```
 

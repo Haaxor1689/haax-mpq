@@ -24,6 +24,12 @@ const defaultPatchignore = `
 **/*.md
 **/*.sql
 
+# ignore special mpq files
+(listfile)
+(attributes)
+(signature)
+(user data)
+
 .patchignore`;
 
 const Patchignore = async (directoryPath: string) => {
