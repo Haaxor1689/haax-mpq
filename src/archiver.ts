@@ -14,8 +14,17 @@ import {
   MPQ_CREATE,
   MPQ_FILE
 } from 'stormlib-node/dist/enums';
-import Logger, { getTimeElapsed } from './logger';
 import Patchignore from './patchignore';
+
+const pad = (v: number, p = 2) => v.toString().padStart(p, '0');
+export const getTimeElapsed = (startDate: Date, endDate = new Date()) => {
+  let ms = endDate.getTime() - startDate.getTime();
+  const m = Math.floor(ms / (1000 * 60));
+  ms %= 1000 * 60;
+  const s = Math.floor(ms / 1000);
+  ms %= 1000;
+  return `${m ? `${pad(m)}:` : ''}${pad(s)}.${pad(ms, 3)}`;
+};
 
 type ArchiveBuildOptions = {
   archivePath: string;
@@ -27,12 +36,12 @@ export const build = async (input: ArchiveBuildOptions) => {
 
   const matches = await Patchignore(input.directoryPath);
 
-  Logger.log(`Building archive "${path.basename(input.archivePath)}"...`);
+  console.log(
+    `Building "${input.directoryPath}" into archive "${input.archivePath}"...`
+  );
 
   const getAllFiles = async (filePath: string): Promise<string[]> => {
-    const relativePath = filePath
-      .slice(input.directoryPath.length + 1)
-      .replaceAll('\\\\', '/');
+    const relativePath = filePath.slice(input.directoryPath.length + 1);
     if (await matches(relativePath)) return [];
 
     if (!(await fs.lstat(filePath)).isDirectory()) return [filePath];
@@ -58,19 +67,16 @@ export const build = async (input: ArchiveBuildOptions) => {
 
   try {
     for (const file of files) {
-      const fullPath = file.replaceAll('\\\\', '/');
-      const relativePath = file
-        .slice(input.directoryPath.length + 1)
-        .replaceAll('\\\\', '/');
+      const relativePath = file.slice(input.directoryPath.length + 1);
 
       if (await matches(relativePath)) {
-        Logger.log(`Ignored "${relativePath}"`);
+        console.log(`Ignored "${relativePath}"`);
         continue;
       }
 
       SFileAddFileEx(
         hMpq,
-        fullPath,
+        file,
         relativePath,
         MPQ_FILE.COMPRESS,
         MPQ_COMPRESSION.ZLIB,
@@ -78,16 +84,16 @@ export const build = async (input: ArchiveBuildOptions) => {
       );
     }
 
-    Logger.log('Compressing the archive...');
+    console.log('Compressing the archive...');
     SFileCompactArchive(hMpq);
 
-    Logger.log(
+    console.log(
       `Archive "${path.basename(input.archivePath)}" built in ${getTimeElapsed(
         startTime
       )}s`
     );
   } catch (e) {
-    Logger.error(e);
+    console.error(e);
   } finally {
     SFileCloseArchive(hMpq);
   }

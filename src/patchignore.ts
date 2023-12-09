@@ -28,8 +28,15 @@ const defaultPatchignore = `
 
 const Patchignore = async (directoryPath: string) => {
   const patchignorePath = path.join(directoryPath, '.patchignore');
+  const exists = existsSync(patchignorePath);
+  console.log(
+    exists
+      ? 'Loading .patchignore from target directory'
+      : 'Using default .patchignore'
+  );
+
   const patchignore = (
-    existsSync(patchignorePath)
+    exists
       ? await fs.readFile(patchignorePath, { encoding: 'utf-8' })
       : defaultPatchignore
   )
