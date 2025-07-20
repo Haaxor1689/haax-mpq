@@ -20,6 +20,12 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install build dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libbz2-dev
+
       - name: Build the project
         run: cargo build --release
 
