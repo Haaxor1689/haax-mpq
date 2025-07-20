@@ -15,21 +15,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
-          node-version: 16
-
-      - name: Install dependencies
-        run: npm install
+          toolchain: stable
 
       - name: Build the project
-        run: npm run bundle
+        run: cargo build --release
 
       - name: Check if Tag Exists
         id: check_tag
         run: |
-          version=$(node -e "console.log(require('./package.json').version)")
+          version=$(grep '^version' Cargo.toml | head -n 1 | cut -d '"' -f 2)
           tag_exists=$(git ls-remote --tags origin "refs/tags/v$version")
           if [ -z "$tag_exists" ]; then
             echo "Tag does not exist. Creating tag..."
@@ -47,9 +44,9 @@ jobs:
         id: determine_artifact
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "::set-output name=artifact_file::haax-mpq.exe"
+            echo "::set-output name=artifact_file::target/release/haax-mpq.exe"
           else
-            echo "::set-output name=artifact_file::haax-mpq"
+            echo "::set-output name=artifact_file::target/release/haax-mpq"
           fi
         shell: bash
 

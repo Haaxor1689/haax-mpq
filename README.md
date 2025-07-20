@@ -5,15 +5,15 @@ CLI utility to build MPQ archive from a folder.
 ## Usage
 
 ```
-haax-mpq <directoryPath> <archivePath?>
+haax-mpq <input> <output>
 ```
 
-- `directoryPath`: Full path to the folder
-- `archivePath`: Full path to the output MPQ file. Default: `<directoryPath>.mpq`
+- Providing MPQ path as `input` extracts it into given `output` folder
+- Providing folder path as `input` packages it into a MPQ archive at give `output` path
 
 ## Patchignore
 
-You can add a `.patchignore` file to your archive folder that will list rules about what files shouldn't be included in the built archive. It uses a similar syntax to `.gitignore` files (using [anymatch](https://github.com/micromatch/anymatch) library).
+You can add a `.patchignore` file to your archive folder that will list rules about what files shouldn't be included in the built archive. It uses a similar syntax to `.gitignore` files.
 
 If no `.patchignore` file is found, these defaults will be used:
 
@@ -45,7 +45,3 @@ If no `.patchignore` file is found, these defaults will be used:
 
 .patchignore
 ```
-
-## Executable
-
-You can also use this CLI as a standalone executable that can be found in Releases. Download `haax-mpq.exe` for Windows or `haax-mpq` for Linux. You can then drag & drop any folder you want to archive onto the executable.
