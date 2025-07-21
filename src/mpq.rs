@@ -47,23 +47,19 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
 
     if patchignore_path.exists() {
         walk_builder.add_custom_ignore_filename(".patchignore");
-        log::info!("[RUST] build_mpq: Using .patchignore for ignore rules.");
+        log::info!("build_mpq: Using .patchignore for ignore rules.");
     } else {
         walk_builder.add_ignore(DEFAULT_PATCHIGNORE);
-        log::warn!("[RUST] build_mpq: .patchignore not found. Using .defaultignore as fallback.");
+        log::warn!("build_mpq: .patchignore not found. Using .defaultignore as fallback.");
     }
 
     // Read all files from the source directory recursively into hashmap of paths and mtimes
     let mut files = HashMap::new();
-    for entry in walk_builder
-        .add_custom_ignore_filename(".patchignore")
-        .build()
-        .into_iter()
-    {
+    for entry in walk_builder.build().into_iter() {
         let entry = match entry {
             Ok(entry) => entry,
             Err(e) => {
-                log::warn!("[RUST] build_mpq: Failed to read entry: {}", e);
+                log::warn!("build_mpq: Failed to read entry: {}", e);
                 continue;
             }
         };
@@ -89,22 +85,31 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
 
         files.insert(name, mtime);
     }
+    let initial = files.len() as u64;
 
     let archive = match fs::exists(path) {
         Ok(true) => {
-            log::info!("[RUST] build_mpq Opening archive \"{path}\"");
+            log::info!("build_mpq Opening archive \"{path}\"");
             let archive = match Archive::open(path, OpenArchiveFlags::empty()) {
                 Ok(guard) => guard,
                 Err(e) => {
-                    log::error!("[RUST] build_mpq Failed to open archive {}: {}", path, e);
+                    log::error!("build_mpq Failed to open archive {}: {}", path, e);
                     return Err(e.into());
                 }
             };
 
+            if let Err(_) = archive.set_max_file_count(initial as u32) {
+                log::info!(
+                    "build_mpq Patch \"{path}\" has enough capacity for {} files",
+                    initial
+                );
+            }
+
+            // If the archive already exists, check for listfile and attributes
             let has_listfile = match archive.open_file("(listfile)") {
                 Ok(_) => true,
                 Err(e) => {
-                    log::error!("[RUST] build_mpq: Missing listfile in patch \"{path}\": {e}");
+                    log::error!("build_mpq: Missing listfile in patch \"{path}\": {e}");
                     false
                 }
             };
@@ -112,7 +117,7 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
             let has_attributes = match archive.open_file("(attributes)") {
                 Ok(_) => true,
                 Err(e) => {
-                    log::error!("[RUST] build_mpq: Missing attributes in patch \"{path}\": {e}");
+                    log::error!("build_mpq: Missing attributes in patch \"{path}\": {e}");
                     false
                 }
             };
@@ -126,22 +131,23 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
             archive
         }
         _ => {
-            log::info!("[RUST] build_mpq Creating archive \"{path}\"");
+            log::info!("build_mpq Creating archive \"{path}\"");
             match Archive::create(
                 path,
                 CreateArchiveFlags::MPQ_CREATE_ARCHIVE_V1
                     | CreateArchiveFlags::MPQ_CREATE_LISTFILE
                     | CreateArchiveFlags::MPQ_CREATE_ATTRIBUTES,
-                files.len() as u32,
+                initial as u32,
             ) {
                 Ok(guard) => guard,
                 Err(e) => {
-                    log::error!("[RUST] build_mpq Failed to create archive \"{path}\": {e}");
+                    log::error!("build_mpq Failed to create archive \"{path}\": {e}");
                     return Err(e.into());
                 }
             }
         }
     };
+    let mut done = 0u64;
 
     // Iterate over all files in the archive
     for search_result in archive.search(None)? {
@@ -159,23 +165,26 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
         let file_mtime = match files.remove(&name) {
             Some(file_mtime) => file_mtime,
             None => {
-                log::info!("[RUST] build_mpq Removing file from archive: {name}");
+                log::info!("build_mpq Removing file from archive: {name}");
                 archive.remove_file(&name)?;
                 continue;
             }
         };
+        done += 1;
 
         let archive_mtime =
             ((search_result.dwFileTimeHi as u64) << 32) | (search_result.dwFileTimeLo as u64);
 
         if file_mtime == archive_mtime {
-            log::info!("[RUST] build_mpq Skipping file (mtime match): {name}",);
+            log::info!("build_mpq Skipping file (mtime match): {name} {done}/{initial}");
             continue;
         }
 
-        log::info!("[RUST] build_mpq Updating file in archive: {name}",);
+        log::info!("build_mpq Updating file in archive: {name} {done}/{initial}");
+
+        let mut file = File::open(&Path::new(source).join(&name))?;
         let mut buffer = Vec::new();
-        File::open(&Path::new(source).join(&name))?.read(&mut buffer)?;
+        file.read_to_end(&mut buffer)?;
 
         archive.remove_file(&name)?;
         archive.create_file(CreateFileOptions {
@@ -189,12 +198,16 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
 
     // Iterate over remaining files in the source directory
     for (name, file_mtime) in files {
-        log::info!("[RUST] build_mpq Adding new file to archive: {name}",);
+        let escaped_name = name.replace("/", "\\");
+
+        done += 1;
+        log::info!("build_mpq Adding new file to archive: {escaped_name} {done}/{initial}");
+
         let mut buffer = Vec::new();
         File::open(Path::new(source).join(&name))?.read_to_end(&mut buffer)?;
 
         archive.create_file(CreateFileOptions {
-            path: &name,
+            path: &escaped_name,
             data: &buffer,
             mtime: file_mtime,
             flags: CreateFileFlags::MPQ_FILE_COMPRESS,
@@ -211,17 +224,17 @@ pub async fn build(path: &str, source: &str) -> Result<(), Box<dyn std::error::E
 pub async fn extract(path: &str, target: &str) -> Result<(), Box<dyn std::error::Error>> {
     let archive = match fs::exists(path) {
         Ok(true) => {
-            log::info!("[RUST] extract_mpq Opening archive \"{path}\"");
-            match Archive::open(path, OpenArchiveFlags::empty()) {
+            log::info!("extract_mpq Opening archive \"{path}\"");
+            match Archive::open(path, OpenArchiveFlags::STREAM_FLAG_READ_ONLY) {
                 Ok(guard) => guard,
                 Err(e) => {
-                    log::error!("[RUST] extract_mpq Failed to open archive {}: {}", path, e);
+                    log::error!("extract_mpq Failed to open archive {path}: {e}");
                     return Err(e.into());
                 }
             }
         }
         _ => {
-            log::warn!("[RUST] extract_mpq Missing archive \"{path}\"");
+            log::warn!("extract_mpq Missing archive \"{path}\"");
             return Ok(());
         }
     };
@@ -243,9 +256,7 @@ pub async fn extract(path: &str, target: &str) -> Result<(), Box<dyn std::error:
         let mut file = match archive.open_file(name.as_str()) {
             Ok(file) => file,
             Err(e) => {
-                log::error!(
-                    "[RUST] extract_mpq: Failed to open \"{name}\" in patch \"{path}\": {e}"
-                );
+                log::error!("extract_mpq: Failed to open \"{name}\" in patch \"{path}\": {e}");
                 continue;
             }
         };
@@ -257,7 +268,7 @@ pub async fn extract(path: &str, target: &str) -> Result<(), Box<dyn std::error:
         }
         fs::write(&target_path, file.read_all()?)?;
         log::info!(
-            "[RUST] extract_mpq Extracted file \"{name}\" to \"{}\"",
+            "extract_mpq Extracted file \"{name}\" to \"{}\"",
             target_path.display()
         );
     }
